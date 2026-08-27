@@ -1,0 +1,4 @@
+# Inserted into the profile composition when this bundle is installed.
+- insert:
+    - id: dsh-deepseek-balance
+      name: dsh-deepseek-balance
