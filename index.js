@@ -1,11 +1,17 @@
 import { Buffer } from 'node:buffer'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
 import {
   BALANCE_PATH,
   DEFAULT_API_KEY_ENV,
   DEFAULT_BASE_URL,
+  DEFAULT_PREFS,
+  PREFS_ROUTE,
   ROUTE,
   isLoopbackAddress,
   parseBalancePayload,
+  parsePrefs,
 } from './parse.js'
 
 export const name = 'dsh-deepseek-balance'
@@ -79,7 +85,7 @@ async function readOfficialBalance(ctx, signal) {
       headers: {
         authorization: `Bearer ${apiKey}`,
         accept: 'application/json',
-        'user-agent': 'dsh-deepseek-balance/0.1.0',
+        'user-agent': 'dsh-deepseek-balance/0.2.2',
       },
       signal,
     })
@@ -128,34 +134,112 @@ function rejectUnlessLocal(req, res) {
   return false
 }
 
+function prefsFile() {
+  const home = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME.trim() !== ''
+    ? process.env.DSH_HOME.trim()
+    : join(homedir(), '.dsh')
+  return join(home, 'dsh-deepseek-balance.json')
+}
+
+async function loadPrefsFile() {
+  try {
+    const raw = await readFile(prefsFile(), 'utf8')
+    return parsePrefs(JSON.parse(raw))
+  } catch {
+    return { ...DEFAULT_PREFS }
+  }
+}
+
+async function savePrefsFile(prefs) {
+  const path = prefsFile()
+  await mkdir(dirname(path), { recursive: true })
+  const tmp = `${path}.tmp`
+  await writeFile(tmp, `${JSON.stringify(prefs, null, 2)}\n`, 'utf8')
+  await rename(tmp, path)
+}
+
+async function readJsonBody(req, limit = 4096) {
+  const chunks = []
+  let size = 0
+  for await (const chunk of req) {
+    size += chunk.length
+    if (size > limit) {
+      const error = new Error('payload too large')
+      error.code = 'too-large'
+      throw error
+    }
+    chunks.push(chunk)
+  }
+  const raw = Buffer.concat(chunks).toString('utf8').trim()
+  if (raw === '') return {}
+  return JSON.parse(raw)
+}
+
+function registerExact(web, webServer, path, handler, label) {
+  web.effect(() => webServer.register({
+    kind: 'exact',
+    path,
+    handler,
+  }), label)
+}
+
 export function apply(ctx) {
   ctx.inject(['webServer'], (web) => {
     const webServer = web.get('webServer')
-    web.effect(() => webServer.register({
-      kind: 'exact',
-      path: ROUTE,
-      async handler(req, res) {
-        if (rejectUnlessLocal(req, res)) return
-        if (req.method !== 'GET') {
-          res.setHeader('allow', 'GET')
-          sendJson(res, 405, { ok: false, code: 'method', error: 'Method not allowed.' })
+    registerExact(web, webServer, ROUTE, async (req, res) => {
+      if (rejectUnlessLocal(req, res)) return
+      if (req.method !== 'GET') {
+        res.setHeader('allow', 'GET')
+        sendJson(res, 405, { ok: false, code: 'method', error: 'Method not allowed.' })
+        return
+      }
+      const ac = new AbortController()
+      const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS)
+      try {
+        const result = await readOfficialBalance(ctx, ac.signal)
+        sendJson(res, 200, result)
+      } catch (error) {
+        sendJson(res, 500, {
+          ok: false,
+          code: 'internal',
+          error: errorMessage(error) || '查询余额失败。',
+        })
+      } finally {
+        clearTimeout(timer)
+      }
+    }, 'dsh-deepseek-balance')
+
+    registerExact(web, webServer, PREFS_ROUTE, async (req, res) => {
+      if (rejectUnlessLocal(req, res)) return
+      if (req.method === 'GET') {
+        sendJson(res, 200, { ok: true, prefs: await loadPrefsFile() })
+        return
+      }
+      if (req.method !== 'PUT') {
+        res.setHeader('allow', 'GET, PUT')
+        sendJson(res, 405, { ok: false, code: 'method', error: 'Method not allowed.' })
+        return
+      }
+      try {
+        const body = await readJsonBody(req)
+        const prefs = parsePrefs(body)
+        await savePrefsFile(prefs)
+        sendJson(res, 200, { ok: true, prefs })
+      } catch (error) {
+        if (error && error.code === 'too-large') {
+          sendJson(res, 413, { ok: false, code: 'too-large', error: '偏好设置内容过大。' })
           return
         }
-        const ac = new AbortController()
-        const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS)
-        try {
-          const result = await readOfficialBalance(ctx, ac.signal)
-          sendJson(res, 200, result)
-        } catch (error) {
-          sendJson(res, 500, {
-            ok: false,
-            code: 'internal',
-            error: errorMessage(error) || '查询余额失败。',
-          })
-        } finally {
-          clearTimeout(timer)
+        if (error instanceof SyntaxError) {
+          sendJson(res, 400, { ok: false, code: 'malformed', error: '偏好设置不是合法 JSON。' })
+          return
         }
-      },
-    }), 'dsh-deepseek-balance')
+        sendJson(res, 500, {
+          ok: false,
+          code: 'internal',
+          error: errorMessage(error) || '保存偏好设置失败。',
+        })
+      }
+    }, 'dsh-deepseek-balance/prefs')
   })
 }

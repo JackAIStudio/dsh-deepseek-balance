@@ -1,8 +1,8 @@
 {
   "name": "dsh-deepseek-balance",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "private": true,
-  "description": "Quiet DeepSeek API balance chip for the DSH Web composer: remaining CNY/USD and a manual refresh. Keys stay on the host.",
+  "description": "Quiet DeepSeek API balance under the composer, plus a Settings page: remaining CNY/USD, event-driven refresh, no mascot. Keys stay on the host.",
   "type": "module",
   "main": "./index.js",
   "exports": {

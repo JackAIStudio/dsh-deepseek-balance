@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatMoney, parseBalancePayload, parseMoney, pickPrimary } from '../parse.js'
+import { formatMoney, isLowBalance, parseBalancePayload, parseMoney, parsePrefs, pickPrimary } from '../parse.js'
 
 test('parseMoney accepts official string amounts', () => {
   assert.equal(parseMoney('9.00'), 9)
@@ -50,4 +50,30 @@ test('parseBalancePayload rejects a missing infos array', () => {
 test('formatMoney uses a currency prefix and two decimals', () => {
   assert.equal(formatMoney('CNY', 9), '¥9.00')
   assert.equal(formatMoney('USD', 12.3), '$12.30')
+})
+
+test('isLowBalance uses ¥5 / $1 as the quiet warning line', () => {
+  assert.equal(isLowBalance({ currency: 'CNY', total: 5 }), false)
+  assert.equal(isLowBalance({ currency: 'CNY', total: 4.99 }), true)
+  assert.equal(isLowBalance({ currency: 'USD', total: 1 }), false)
+  assert.equal(isLowBalance({ currency: 'USD', total: 0.5 }), true)
+  assert.equal(isLowBalance(null), false)
+})
+
+test('parsePrefs fills defaults and ignores unknown fields', () => {
+  assert.deepEqual(parsePrefs(undefined), {
+    placement: 'dock',
+    refresh: 'turn',
+    icon: 'whale',
+  })
+  assert.deepEqual(parsePrefs({ placement: 'hidden', refresh: 'interval', icon: 'amount', extra: 1 }), {
+    placement: 'hidden',
+    refresh: 'interval',
+    icon: 'amount',
+  })
+  assert.deepEqual(parsePrefs({ placement: 'floating', refresh: 'always' }), {
+    placement: 'dock',
+    refresh: 'turn',
+    icon: 'whale',
+  })
 })
