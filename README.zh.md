@@ -10,6 +10,7 @@ DeepSeek Harness Web 上的克制余额显示：在输入卡片下方（和会�
 - 点击芯片刷新；悬停可看充值 / 赠送拆分和更新时间
 - 默认跟随对话刷新（一轮结束后再查），切回窗口会去抖补一次；可选每 5 分钟
 - 设置 → DeepSeek 余额：看拆分、改位置 / 刷新 / 图标
+- `dsh-mobile-plus` 会从主机 loopback 读本路由，把同一份余额显示在手机远程页（密钥仍不出 Host）
 - **不**弹窗、**不**漂浮挂件、**不**吉祥物 PNG
 
 ## 安装
@@ -24,4 +25,4 @@ dsh plugin --profile web add link:$HOME/Documents/dshspace/plugins/dsh-deepseek-
 dsh plugin --profile web add github:JackAIStudio/dsh-deepseek-balance
 ```
 
-然后重启一次 `dsh web`。密钥沿用设置 → 模型里已保存的 `DEEPSEEK_API_KEY`。偏好写在 `$DSH_HOME/dsh-deepseek-balance.json`。
+装完或改了 host/client 之后需要重启 `dsh web` 才生效。**不要自己重启正在跑的进程**；告诉用户。密钥沿用设置 → 模型里已保存的 `DEEPSEEK_API_KEY`。偏好写在 `$DSH_HOME/dsh-deepseek-balance.json`。
