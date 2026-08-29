@@ -19,8 +19,12 @@ window.__ModuleLoader__.load({
       // InputBar column child. Force one shared stats band, matching the slot contract.
       '[data-slot="conversation.composer.dock"]:has(> .dsbal-dock){display:flex!important;flex-flow:row nowrap;justify-content:center;align-items:center;box-sizing:border-box;width:100%;max-width:var(--dsh-chat-content-width);min-width:0;padding:4px calc(var(--dsh-composer-side-clearance) + 16px) 0;overflow:hidden}',
       '[data-slot="conversation.composer.dock"]:has(> .dsbal-dock)>*{box-sizing:border-box;flex:0 1 auto;min-width:0;width:auto!important;max-width:none!important;margin:0!important;padding:0!important}',
+      // Blank/new sessions skip conversation.composer.dock. Reuse input.dock under the card.
+      '[data-phase="hero"] [data-slot="conversation.input.dock"]:has(> .dsbal-dock){display:flex!important;flex:none!important;flex-flow:row nowrap;justify-content:center;align-items:center;box-sizing:border-box;width:100%;max-width:var(--dsh-chat-content-width);min-width:0;min-height:20px;padding:4px calc(var(--dsh-composer-side-clearance) + 16px);overflow:visible;order:30;align-self:center}',
+      '[data-phase="hero"] [data-slot="conversation.input.dock"]:has(> .dsbal-dock)>*{box-sizing:border-box;flex:0 1 auto;min-width:0;width:auto!important;max-width:none!important;margin:0!important;padding:0!important}',
       '.dsbal-dock{display:inline-flex;align-items:center;flex:none;line-height:20px}',
       '[data-slot="conversation.composer.dock"]:has(> .dsbal-dock)>.dsbal-dock{flex:none;overflow:visible}',
+      '[data-phase="hero"] [data-slot="conversation.input.dock"]:has(> .dsbal-dock)>.dsbal-dock{flex:none;overflow:visible}',
       '.dsbal-dock:not(:last-child):after{content:"|";color:var(--dsw-alias-separator-primary);margin:0 10px;font-size:12px;line-height:20px}',
       '.dsbal{appearance:none;display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 2px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:12px;line-height:20px;letter-spacing:.01em;white-space:nowrap;cursor:pointer;user-select:none}',
       '.dsbal:hover,.dsbal:focus-visible{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);outline:none}',
@@ -56,7 +60,7 @@ window.__ModuleLoader__.load({
       '.dsbal-icon-btn:disabled{opacity:.55;cursor:default}',
       '.dsbal-icon-btn.is-loading svg{animation:dsbal-spin .8s linear infinite}',
       '@media (prefers-reduced-motion:reduce){.dsbal-icon-btn.is-loading svg{animation:none}}',
-      '@media (max-width:640px){[data-slot="conversation.composer.dock"]:has(> .dsbal-dock){padding-left:12px;padding-right:12px}.dsbal-hero{font-size:24px;line-height:32px}}',
+      '@media (max-width:640px){[data-slot="conversation.composer.dock"]:has(> .dsbal-dock),[data-phase="hero"] [data-slot="conversation.input.dock"]:has(> .dsbal-dock){padding-left:12px;padding-right:12px}.dsbal-hero{font-size:24px;line-height:32px}}',
     ].join('')
 
     const tagId = 'dsh-deepseek-balance/ui.css'
@@ -398,9 +402,14 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function isBlankComposer(useSession) {
+      return typeof useSession === 'function' && useSession((s) => s.composerPhase) === 'blank'
+    }
+
     function Chip(props) {
       const t = locale()
       useStore()
+      const blank = isBlankComposer(props.useSession)
       const running = typeof props.useSession === 'function'
         ? props.useSession((s) => s.running)
         : false
@@ -410,6 +419,7 @@ window.__ModuleLoader__.load({
         prevRunning.current = running
       }, [running])
 
+      if ((props.seat === 'hero') !== blank) return null
       if (prefs.placement === 'hidden') return null
 
       const view = amountState(t)
@@ -573,7 +583,16 @@ window.__ModuleLoader__.load({
           order: -10,
           label: 'DeepSeek 余额',
         },
-        (props) => h(Chip, props),
+        (props) => h(Chip, { ...props, seat: 'dock' }),
+      ))
+      slots.inject('conversation.input.dock', () => slots.register(
+        {
+          name: 'conversation.input.dock',
+          id: 'dsh-deepseek-balance-hero',
+          order: 50,
+          label: 'DeepSeek 余额',
+        },
+        (props) => h(Chip, { ...props, seat: 'hero' }),
       ))
       slots.inject('settings.section', () => slots.register(
         {
